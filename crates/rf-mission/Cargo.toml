@@ -1,0 +1,16 @@
+[package]
+name = "rf-mission"
+description = "RF-LOG v2 mission orchestrator: wires the sensor pool, survey DSP, bus, and catalog into a mission lifecycle."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rf-types = { workspace = true }
+rf-sensor = { path = "../rf-sensor" }
+rf-dsp = { path = "../rf-dsp" }
+rf-bus = { path = "../rf-bus" }
+rf-catalog = { path = "../rf-catalog" }
+tokio = { workspace = true }
+tracing = { workspace = true }

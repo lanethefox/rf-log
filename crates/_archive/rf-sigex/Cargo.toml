@@ -1,0 +1,11 @@
+[package]
+name = "rf-sigex"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rf-db = { path = "../rf-db" }
+rf-p25 = { path = "../rf-p25" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,38 @@
+[package]
+name = "rf-log-egui"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rf-log-egui"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.33", features = ["persistence"] }
+egui_extras = "0.33"
+egui_plot = "0.34"
+
+# Backend crates (direct dependency, no IPC)
+rf-web = { path = "../rf-web" }
+rf-db = { path = "../rf-db" }
+rf-sdr = { path = "../rf-sdr" }
+rf-dsp = { path = "../rf-dsp" }
+rf-scan = { path = "../rf-scan" }
+rf-recorder = { path = "../rf-recorder" }
+rf-sigex = { path = "../rf-sigex" }
+rf-p25 = { path = "../rf-p25" }
+rf-same = { path = "../rf-same" }
+rf-events = { path = "../rf-events" }
+
+# Async runtime for background tasks
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
+cpal = { workspace = true }
+num-complex = { workspace = true }
+rustfft = { workspace = true }
+hound = { workspace = true }
+notify-rust = "4"

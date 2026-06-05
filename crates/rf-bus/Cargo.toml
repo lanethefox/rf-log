@@ -1,0 +1,11 @@
+[package]
+name = "rf-bus"
+description = "RF-LOG v2 event bus: lossy broadcast telemetry (PSD/status) + a lossless detection path."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rf-types = { workspace = true }
+tokio = { workspace = true }

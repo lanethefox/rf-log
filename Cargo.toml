@@ -1,0 +1,49 @@
+# RF-LOG v2 workspace. See docs/RF-LOG-v2.md and docs/plan/P0-foundation.md.
+#
+# Members are added as each crate is lifted/built. The not-yet-lifted v1 keeper
+# crates (rf-sdr, rf-dsp, rf-p25, rf-masint, rf-elint, rf-liquid*) and the vendored
+# P25 stack are `exclude`d for now — they stay on disk and join the workspace as
+# their P0/P4 workstreams refactor them. `crates/_archive/` holds the scrapped v1
+# crates for reference only.
+[workspace]
+resolver = "3"
+members = [
+  "crates/rf-types",
+  "crates/rf-dsp",
+  "crates/rf-sensor",
+  "crates/rf-bus",
+  "crates/rf-catalog",
+  "crates/rf-mission",
+  "app/src-tauri",
+]
+exclude = [
+  "crates/_archive",
+  "crates/rf-p25",
+  "crates/rf-masint",
+  "crates/rf-elint",
+  "crates/rf-liquid",
+  "crates/rf-liquid-sys",
+  "vendor/p25",
+  "vendor/imbe",
+  "vendor/static_fir",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# shared third-party
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+num-complex = "0.4"
+rustfft = "6"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+# internal
+rf-types = { path = "crates/rf-types" }

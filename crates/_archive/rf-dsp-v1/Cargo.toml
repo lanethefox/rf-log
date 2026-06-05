@@ -1,0 +1,12 @@
+[package]
+name = "rf-dsp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rustfft = { workspace = true }
+num-complex = { workspace = true }
+tracing = { workspace = true }
+rf-liquid = { path = "../rf-liquid" }
+rf-p25 = { path = "../rf-p25" }
+p25 = { path = "../../vendor/p25" }

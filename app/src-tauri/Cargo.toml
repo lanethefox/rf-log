@@ -1,0 +1,20 @@
+[package]
+name = "rf-log-app"
+description = "RF-LOG v2 native desktop app (Tauri v2)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+rf-types = { workspace = true }
+rf-bus = { path = "../../crates/rf-bus" }
+rf-catalog = { path = "../../crates/rf-catalog" }
+rf-mission = { path = "../../crates/rf-mission" }

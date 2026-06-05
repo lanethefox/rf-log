@@ -1,0 +1,10 @@
+[package]
+name = "rf-types"
+description = "Shared cross-crate contracts for RF-LOG v2 (ids, units, Detection, PsdFrame, BusEvent, Sensor types)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { workspace = true }

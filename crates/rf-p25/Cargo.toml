@@ -1,0 +1,11 @@
+[package]
+name = "rf-p25"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+p25 = { path = "../../vendor/p25" }
+imbe = { path = "../../vendor/imbe" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

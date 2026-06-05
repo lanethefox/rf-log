@@ -1,0 +1,11 @@
+[package]
+name = "rf-liquid-sys"
+version = "0.1.0"
+edition = "2024"
+links = "liquid"
+
+[build-dependencies]
+bindgen = "0.71"
+
+[dependencies]
+num-complex = { workspace = true }

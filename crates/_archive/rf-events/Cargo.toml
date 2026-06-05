@@ -1,0 +1,12 @@
+[package]
+name = "rf-events"
+version = "0.1.0"
+edition = "2024"
+description = "Unified SIEM event model, query engine, alert engine, and event manager for RF-LOG"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }

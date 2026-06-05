@@ -1,0 +1,30 @@
+[package]
+name = "rf-sentinel"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "rf-sentinel"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+num-complex = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+anyhow = "1"
+
+rf-sdr = { path = "../rf-sdr" }
+rf-dsp = { path = "../rf-dsp" }
+rf-db = { path = "../rf-db" }
+rf-web = { path = "../rf-web" }
+rf-scan = { path = "../rf-scan" }
+rf-elint = { path = "../rf-elint" }
+rf-masint = { path = "../rf-masint" }

@@ -1,0 +1,11 @@
+[package]
+name = "rf-sdr"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+num-complex = { workspace = true }
+tracing = { workspace = true }
+soapysdr = { workspace = true }

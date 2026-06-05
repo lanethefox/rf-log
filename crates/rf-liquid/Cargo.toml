@@ -1,0 +1,8 @@
+[package]
+name = "rf-liquid"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rf-liquid-sys = { path = "../rf-liquid-sys" }
+num-complex = { workspace = true }

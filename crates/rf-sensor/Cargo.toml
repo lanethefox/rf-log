@@ -1,0 +1,13 @@
+[package]
+name = "rf-sensor"
+description = "RF-LOG v2 heterogeneous IQ sensor layer: sensor trait, fan-out rings, simulated pool, sweep scheduler."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rf-types = { workspace = true }
+num-complex = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

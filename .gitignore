@@ -1,0 +1,41 @@
+# Rust
+/target
+**/target
+
+# Node / frontend
+**/node_modules
+**/dist
+.vite
+
+# Tauri
+/app/src-tauri/target
+/app/src-tauri/gen
+
+# IQ / signal data (large, not source)
+*.sigmf-data
+*.iq
+*.cf32
+*.cs8
+
+# Python / ML
+__pycache__/
+*.pyc
+.venv/
+ml/data/
+ml/runs/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Env
+.env
+.env.local
+
+# Private design/planning/guidance docs — kept local, never published
+docs/
+CLAUDE.md
+GEMINI.md
+.claude/

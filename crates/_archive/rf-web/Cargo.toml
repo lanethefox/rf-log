@@ -1,0 +1,15 @@
+[package]
+name = "rf-web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rf-db = { path = "../rf-db" }
+rf-sdr = { path = "../rf-sdr" }
+rf-scan = { path = "../rf-scan" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+serialport = { workspace = true }

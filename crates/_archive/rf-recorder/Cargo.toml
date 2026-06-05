@@ -1,0 +1,11 @@
+[package]
+name = "rf-recorder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hound = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+num-complex = { workspace = true }

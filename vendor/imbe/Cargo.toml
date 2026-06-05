@@ -1,0 +1,15 @@
+[package]
+name = "imbe"
+version = "1.0.0"
+authors = ["Mick Koch <mick@kochm.co>"]
+
+[dependencies]
+
+arrayvec = "0.7"
+collect_slice = "1.2"
+iq_osc = "3.0.0"
+num-complex = "0.4"
+num-traits = "0.2"
+rand = { version = "0.8", features = ["small_rng"] }
+rand_distr = "0.4"
+slice_mip = "1.0.0"
