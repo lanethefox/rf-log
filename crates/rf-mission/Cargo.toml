@@ -14,3 +14,7 @@ rf-bus = { path = "../rf-bus" }
 rf-catalog = { path = "../rf-catalog" }
 tokio = { workspace = true }
 tracing = { workspace = true }
+
+[features]
+# Forward hardware support to rf-sensor (needs SoapySDR system lib).
+soapy = ["rf-sensor/soapy"]

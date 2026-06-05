@@ -11,6 +11,8 @@ mod error;
 mod pool;
 mod ring;
 pub mod sim;
+#[cfg(feature = "soapy")]
+pub mod soapy;
 
 pub use error::SensorError;
 pub use pool::{PoolConfig, PoolHandle, SensorPool};
@@ -18,6 +20,8 @@ pub use ring::{
     LosslessConsumer, LosslessIqRing, LosslessProducer, LossyConsumer, LossyIqRing, LossyProducer,
 };
 pub use sim::SimSensor;
+#[cfg(feature = "soapy")]
+pub use soapy::{SoapyDeviceInfo, SoapySdrSensor, enumerate as enumerate_soapy};
 
 use num_complex::Complex32;
 use rf_types::{Band, Hz, SensorCapabilities, SensorId};
