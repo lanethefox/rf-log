@@ -1,0 +1,5 @@
+# Hardware (`--features soapy`) builds need pkg-config to find Homebrew's SoapySDR.pc.
+# `force = false` means this only applies if PKG_CONFIG_PATH isn't already set, and it's
+# harmless on systems without that path. Default (simulation) builds ignore it.
+[env]
+PKG_CONFIG_PATH = { value = "/opt/homebrew/lib/pkgconfig", force = false }

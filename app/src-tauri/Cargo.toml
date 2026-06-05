@@ -18,3 +18,8 @@ rf-types = { workspace = true }
 rf-bus = { path = "../../crates/rf-bus" }
 rf-catalog = { path = "../../crates/rf-catalog" }
 rf-mission = { path = "../../crates/rf-mission" }
+
+[features]
+# Build with real SDR hardware support: `cargo run -p rf-log-app --features soapy`
+# (requires `brew install soapysdr soapyrtlsdr`). Default build is simulation-only.
+soapy = ["rf-mission/soapy"]

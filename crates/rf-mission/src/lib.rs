@@ -137,16 +137,39 @@ impl MissionManager {
             .fold(f64::NEG_INFINITY, f64::max);
 
         let mut pool = SensorPool::new();
-        for s in 0..self.cfg.num_sensors.max(1) {
-            pool.add(
-                Box::new(SimSensor::new(
-                    SensorId(s as u32),
-                    low,
-                    high,
+        // Prefer real hardware when the `soapy` feature is built and a device is attached;
+        // otherwise fall back to the simulated pool.
+        #[allow(unused_mut)]
+        let mut hardware = false;
+        #[cfg(feature = "soapy")]
+        {
+            for (i, d) in rf_sensor::enumerate_soapy().into_iter().enumerate() {
+                match rf_sensor::SoapySdrSensor::open(
+                    SensorId(i as u32),
+                    &d.args,
                     self.cfg.sample_rate,
-                )),
-                SensorRole::SurveySweep,
-            );
+                ) {
+                    Ok(s) => {
+                        tracing::info!("opened SDR: {}", d.args);
+                        pool.add(Box::new(s), SensorRole::SurveySweep);
+                        hardware = true;
+                    }
+                    Err(e) => tracing::warn!("failed to open {}: {e}", d.args),
+                }
+            }
+        }
+        if !hardware {
+            for s in 0..self.cfg.num_sensors.max(1) {
+                pool.add(
+                    Box::new(SimSensor::new(
+                        SensorId(s as u32),
+                        low,
+                        high,
+                        self.cfg.sample_rate,
+                    )),
+                    SensorRole::SurveySweep,
+                );
+            }
         }
         let (dwell_tx, dwell_rx) = channel();
         let (status_tx, status_rx) = channel();

@@ -11,3 +11,9 @@ rf-types = { workspace = true }
 num-complex = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+soapysdr = { version = "0.4", optional = true }
+
+[features]
+# Real SDR hardware via SoapySDR (needs the system lib: `brew install soapysdr soapyrtlsdr`).
+# Off by default so the sim build compiles with no system dependencies.
+soapy = ["dep:soapysdr"]
