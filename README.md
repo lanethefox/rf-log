@@ -18,9 +18,6 @@ IQ is captured selectively for feature extraction, ML classification, and emitte
 fingerprinting; everything accretes into an emitter catalog and a temporal activity map.
 Analog/P25 decode exists as a secondary, on-demand drill-down — not the main loop.
 
-**Scope:** strictly **passive receive** — no transmit, no jamming, no active capability.
-Operated for research under an FCC Part 5 Experimental Radio License.
-
 ## Stack
 
 Rust Cargo workspace (the engine) + Tauri v2 + React, mission-centric UX with a live
