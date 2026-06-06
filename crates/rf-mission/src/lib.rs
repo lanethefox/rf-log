@@ -308,4 +308,49 @@ mod tests {
         ));
         assert!(mgr.active_mission().is_none());
     }
+
+    /// M2: real RTL-SDR survey over the FM broadcast band (always busy). Ignored by
+    /// default — run with: `cargo test -p rf-mission --features soapy hardware_fm -- --ignored --nocapture`
+    #[cfg(feature = "soapy")]
+    #[tokio::test]
+    #[ignore = "requires RTL-SDR hardware attached"]
+    async fn hardware_fm_band_survey_finds_signals() {
+        let catalog = Arc::new(Catalog::open_in_memory().unwrap());
+        let (bus, det_rx) = rf_bus::channel(1024);
+        let active = Arc::new(AtomicI64::new(-1));
+        spawn_detection_writer(catalog.clone(), active.clone(), det_rx);
+        let mgr = MissionManager::new(catalog.clone(), bus, active, MissionConfig::default());
+
+        let bands = vec![Band {
+            name: "FM".into(),
+            low_hz: 88e6,
+            high_hz: 108e6,
+        }];
+        let id = mgr.create_mission("fm-hw", bands).unwrap();
+        mgr.start(id).unwrap();
+
+        let mut count = 0;
+        for _ in 0..80 {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            count = catalog.detection_count(id).unwrap();
+            if count >= 8 {
+                break;
+            }
+        }
+        let dets = catalog.list_detections(id, 25).unwrap();
+        mgr.stop().unwrap();
+
+        println!("\n=== HARDWARE FM survey: {count} detections ===");
+        for d in &dets {
+            println!(
+                "  {:8.3} MHz  bw {:6.0} kHz  {:6.1} dBFS  snr {:5.1} dB  sensor S{}",
+                d.center_hz / 1e6,
+                d.bandwidth_hz / 1e3,
+                d.power_dbfs,
+                d.snr_db,
+                d.sensor.0
+            );
+        }
+        assert!(count > 0, "expected real FM detections from hardware");
+    }
 }
