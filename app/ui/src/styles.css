@@ -32,6 +32,7 @@ html, body, #root {
 .pill { padding: 2px 8px; border-radius: 10px; font-size: 11px; border: 1px solid var(--border); }
 .pill.on { color: var(--accent); border-color: var(--accent); }
 .pill.off { color: var(--dim); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
 
 .body { display: grid; grid-template-columns: 280px 1fr; min-height: 0; }
 
@@ -63,7 +64,9 @@ button.danger { color: var(--warn); border-color: var(--warn); }
 .chip { padding: 2px 7px; border-radius: 4px; font-size: 11px; border: 1px solid var(--border); }
 .chip.Sweeping { color: var(--accent); border-color: var(--accent); }
 .chip.Connected { color: var(--accent2); border-color: var(--accent2); }
+.chip.Opening { color: var(--warn); border-color: var(--warn); animation: pulse 1s ease-in-out infinite; }
 .chip.Error { color: var(--warn); border-color: var(--warn); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
 
 canvas { display: block; width: 100%; image-rendering: pixelated; background: #060a10; border-radius: 4px; }
 .axis { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; padding: 2px 2px 0; }

@@ -38,8 +38,21 @@ fn create_mission(
 }
 
 #[tauri::command]
-fn start_mission(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
-    state.mgr.start(MissionId(id))
+fn start_mission(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    id: i64,
+) -> Result<(), String> {
+    // Opening real SDRs can take several seconds — run it off the command thread so the
+    // UI stays responsive. Progress/readiness is reported via sensor_info/sensor_status
+    // events; failures come back as a mission_error event.
+    let mgr = state.mgr.clone();
+    std::thread::spawn(move || {
+        if let Err(e) = mgr.start(MissionId(id)) {
+            let _ = app.emit("mission_error", e);
+        }
+    });
+    Ok(())
 }
 
 #[tauri::command]
@@ -146,6 +159,9 @@ fn spawn_event_bridge(app: tauri::AppHandle, bus: Bus) {
                 }
                 Ok(BusEvent::Detection(d)) => {
                     let _ = app.emit("detection", d);
+                }
+                Ok(BusEvent::SensorInfo { id, label }) => {
+                    let _ = app.emit("sensor_info", (id, label));
                 }
                 Ok(BusEvent::SensorStatus { id, state }) => {
                     let _ = app.emit("sensor_status", (id, state));

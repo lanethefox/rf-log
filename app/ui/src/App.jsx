@@ -33,6 +33,8 @@ export default function App() {
   const [activeId, setActiveId] = useState(null);
   const [detections, setDetections] = useState([]);
   const [sensors, setSensors] = useState({});
+  const [sensorLabels, setSensorLabels] = useState({});
+  const [starting, setStarting] = useState(false);
   const [name, setName] = useState("Site survey");
   const [presetIdx, setPresetIdx] = useState(0);
 
@@ -67,10 +69,20 @@ export default function App() {
     const sub = (ev, cb) => api.on(ev, cb).then((u) => unsubs.push(u));
     sub("psd", onPsd);
     sub("detection", (d) => setDetections((prev) => [d, ...prev].slice(0, 300)));
+    sub("sensor_info", ([id, label]) => setSensorLabels((p) => ({ ...p, [id]: label })));
     sub("sensor_status", ([id, state]) => setSensors((p) => ({ ...p, [id]: state })));
     sub("mission_state", ([id, phase]) => {
-      setActiveId(phase === "Running" ? id : null);
+      if (phase === "Running") {
+        setActiveId(id);
+        setStarting(false);
+      } else {
+        setActiveId(null);
+      }
       refreshMissions();
+    });
+    sub("mission_error", (msg) => {
+      setStarting(false);
+      alert("Mission error: " + msg);
     });
     return () => unsubs.forEach((u) => u && u());
   }, [refreshMissions, onPsd]);
@@ -135,10 +147,14 @@ export default function App() {
 
   async function doStart() {
     if (selected == null) return;
+    // Reset device chips; they repopulate as sensor_info/sensor_status events arrive.
+    setSensors({});
+    setSensorLabels({});
+    setStarting(true);
     try {
-      await api.startMission(selected);
-      setActiveId(selected);
+      await api.startMission(selected); // returns immediately; devices open in the background
     } catch (e) {
+      setStarting(false);
       alert("Start failed: " + e);
     }
   }
@@ -163,14 +179,17 @@ export default function App() {
         <span className="sub">passive EM reconnaissance · sim</span>
         <div className="spacer" />
         <div className="sensors">
+          {starting && Object.keys(sensors).length === 0 && (
+            <span className="chip Opening">discovering devices…</span>
+          )}
           {Object.entries(sensors).map(([id, st]) => (
-            <span key={id} className={`chip ${st}`}>
-              S{id}:{st}
+            <span key={id} className={`chip ${st}`} title={sensorLabels[id] || ""}>
+              {sensorLabels[id] || `S${id}`}: {st === "Opening" ? "loading…" : st}
             </span>
           ))}
         </div>
-        <span className={`pill ${active ? "on" : "off"}`}>
-          {active ? `MISSION ${activeId} RUNNING` : "IDLE"}
+        <span className={`pill ${active ? "on" : starting ? "warn" : "off"}`}>
+          {active ? `MISSION ${activeId} RUNNING` : starting ? "STARTING…" : "IDLE"}
         </span>
       </div>
 
@@ -216,8 +235,12 @@ export default function App() {
                 </div>
               ))}
               <div className="row">
-                <button className="primary" disabled={selected == null || active} onClick={doStart}>
-                  ▶ Start
+                <button
+                  className="primary"
+                  disabled={selected == null || active || starting}
+                  onClick={doStart}
+                >
+                  {starting ? "Starting…" : "▶ Start"}
                 </button>
                 <button className="danger" disabled={!active} onClick={doStop}>
                   ■ Stop

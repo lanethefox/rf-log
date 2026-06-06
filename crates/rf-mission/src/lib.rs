@@ -13,6 +13,8 @@ use rf_bus::Bus;
 use rf_catalog::Catalog;
 use rf_dsp::SurveyDsp;
 use rf_sensor::{PoolConfig, PoolHandle, SensorPool, SimSensor, now_unix_ns};
+#[cfg(feature = "soapy")]
+use rf_types::SensorState;
 use rf_types::{Band, BusEvent, Detection, MissionId, MissionPhase, SensorId, SensorRole};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::channel;
@@ -143,18 +145,42 @@ impl MissionManager {
         let mut hardware = false;
         #[cfg(feature = "soapy")]
         {
-            for (i, d) in rf_sensor::enumerate_soapy().into_iter().enumerate() {
-                match rf_sensor::SoapySdrSensor::open(
-                    SensorId(i as u32),
-                    &d.args,
-                    self.cfg.sample_rate,
-                ) {
+            let discovered = rf_sensor::enumerate_soapy();
+            // Announce every device up front so the UI shows them all "loading" at once,
+            // before the slow per-device USB open begins.
+            for (i, d) in discovered.iter().enumerate() {
+                let sid = SensorId(i as u32);
+                let label = if d.label.is_empty() {
+                    d.args.clone()
+                } else {
+                    d.label.clone()
+                };
+                self.bus.publish(BusEvent::SensorInfo { id: sid, label });
+                self.bus.publish(BusEvent::SensorStatus {
+                    id: sid,
+                    state: SensorState::Opening,
+                });
+            }
+            // Open each device (the slow part), reporting readiness as it comes up.
+            for (i, d) in discovered.into_iter().enumerate() {
+                let sid = SensorId(i as u32);
+                match rf_sensor::SoapySdrSensor::open(sid, &d.args, self.cfg.sample_rate) {
                     Ok(s) => {
                         tracing::info!("opened SDR: {}", d.args);
+                        self.bus.publish(BusEvent::SensorStatus {
+                            id: sid,
+                            state: SensorState::Connected,
+                        });
                         pool.add(Box::new(s), SensorRole::SurveySweep);
                         hardware = true;
                     }
-                    Err(e) => tracing::warn!("failed to open {}: {e}", d.args),
+                    Err(e) => {
+                        tracing::warn!("failed to open {}: {e}", d.args);
+                        self.bus.publish(BusEvent::SensorStatus {
+                            id: sid,
+                            state: SensorState::Error,
+                        });
+                    }
                 }
             }
         }

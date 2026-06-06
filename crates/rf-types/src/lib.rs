@@ -94,6 +94,8 @@ pub enum SensorRole {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SensorState {
     Disconnected,
+    /// Device is being opened (USB init / stream activate) — shown as "loading".
+    Opening,
     Connected,
     Sweeping,
     Dwelling,
@@ -193,6 +195,8 @@ pub enum BusEvent {
     Psd(PsdFrame),
     /// A detected signal of interest — lossless, persisted.
     Detection(Detection),
+    /// A sensor was discovered (carries its human label) — emitted before it opens.
+    SensorInfo { id: SensorId, label: String },
     /// A sensor changed state — lossless.
     SensorStatus { id: SensorId, state: SensorState },
     /// A mission changed phase — lossless.
