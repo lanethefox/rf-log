@@ -11,6 +11,10 @@ pub struct CfarConfig {
     pub pfa: f64,
     /// Reject detections weaker than this SNR (dB) above the local noise.
     pub min_snr_db: f32,
+    /// Merge detections whose band edges are within this gap (Hz) — collapses a
+    /// wideband signal (e.g. FM broadcast, with internal spectral nulls) into one
+    /// detection instead of many fragments. Set to 0 to disable.
+    pub merge_gap_hz: f64,
 }
 
 impl Default for CfarConfig {
@@ -20,6 +24,7 @@ impl Default for CfarConfig {
             num_guard: 4,
             pfa: 1e-4,
             min_snr_db: 6.0,
+            merge_gap_hz: 50_000.0,
         }
     }
 }
@@ -130,7 +135,36 @@ pub fn detect(
         }
         i = end + 1;
     }
-    dets
+    merge_adjacent(dets, cfg.merge_gap_hz)
+}
+
+/// Merge detections whose band edges are within `gap_hz` — collapses a wideband
+/// signal's fragments (split by internal spectral nulls) into one detection. All
+/// detections from one `detect()` call share tile/sensor/time, so only freq/bw/
+/// power/snr need combining.
+fn merge_adjacent(mut dets: Vec<Detection>, gap_hz: f64) -> Vec<Detection> {
+    if gap_hz <= 0.0 || dets.len() < 2 {
+        return dets;
+    }
+    dets.sort_by(|a, b| a.center_hz.partial_cmp(&b.center_hz).unwrap());
+    let mut out: Vec<Detection> = Vec::with_capacity(dets.len());
+    for d in dets {
+        if let Some(last) = out.last_mut() {
+            let (l_lo, l_hi) = last.band();
+            let (d_lo, d_hi) = d.band();
+            if d_lo - l_hi <= gap_hz {
+                let lo = l_lo.min(d_lo);
+                let hi = l_hi.max(d_hi);
+                last.center_hz = (lo + hi) / 2.0;
+                last.bandwidth_hz = hi - lo;
+                last.power_dbfs = last.power_dbfs.max(d.power_dbfs);
+                last.snr_db = last.snr_db.max(d.snr_db);
+                continue;
+            }
+        }
+        out.push(d);
+    }
+    out
 }
 
 fn bin_freq(i: f64, n: usize, center: Hz, bin_hz: Hz) -> Hz {
@@ -208,6 +242,21 @@ mod tests {
             dets.is_empty(),
             "CFAR fired on flat noise: {} detections",
             dets.len()
+        );
+    }
+
+    #[test]
+    fn merges_wideband_fragments_within_gap() {
+        let n = 1024;
+        let mut psd = flat_noise(n, -95.0);
+        // two fragments ~13 bins (13 kHz at 1 kHz/bin) apart — inside the 50 kHz default gap
+        psd[500..=503].fill(-40.0);
+        psd[516..=519].fill(-40.0);
+        let dets = detect(&psd, &CfarConfig::default(), 1_000.0, 100e6, SensorId(0), 0);
+        assert_eq!(
+            dets.len(),
+            1,
+            "nearby fragments should merge into one detection"
         );
     }
 
