@@ -8,6 +8,7 @@
 //! the per-role ring semantics the streaming/collector paths need.
 
 mod error;
+mod manager;
 mod pool;
 mod ring;
 pub mod sim;
@@ -15,13 +16,14 @@ pub mod sim;
 pub mod soapy;
 
 pub use error::SensorError;
+pub use manager::DeviceManager;
 pub use pool::{PoolConfig, PoolHandle, SensorPool};
 pub use ring::{
     LosslessConsumer, LosslessIqRing, LosslessProducer, LossyConsumer, LossyIqRing, LossyProducer,
 };
 pub use sim::SimSensor;
 #[cfg(feature = "soapy")]
-pub use soapy::{SoapyDeviceInfo, SoapySdrSensor, enumerate as enumerate_soapy};
+pub use soapy::{SoapyDevice, SoapyDeviceInfo, SoapySdrSensor, enumerate as enumerate_soapy};
 
 use num_complex::Complex32;
 use rf_types::{Band, Hz, SensorCapabilities, SensorId};

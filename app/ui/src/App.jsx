@@ -5,6 +5,7 @@ const W = 900;
 const PRESETS = [
   { name: "VHF 144–174", bands: [{ name: "VHF", low_hz: 144e6, high_hz: 174e6 }] },
   { name: "UHF 400–470", bands: [{ name: "UHF", low_hz: 400e6, high_hz: 470e6 }] },
+  { name: "FM 88–108", bands: [{ name: "FM", low_hz: 88e6, high_hz: 108e6 }] },
   {
     name: "VHF + UHF",
     bands: [
@@ -13,6 +14,7 @@ const PRESETS = [
     ],
   },
 ];
+const SAMPLE_RATES = [2.048e6, 2.4e6, 2.56e6, 3.2e6];
 
 const rangeOf = (bands) => [
   Math.min(...bands.map((b) => b.low_hz)),
@@ -27,13 +29,15 @@ function colormap(db) {
   return [r, g, b];
 }
 
+const mhz = (hz) => (hz / 1e6).toFixed(3);
+
 export default function App() {
   const [missions, setMissions] = useState([]);
   const [selected, setSelected] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [detections, setDetections] = useState([]);
-  const [sensors, setSensors] = useState({});
-  const [sensorLabels, setSensorLabels] = useState({});
+  const [devices, setDevices] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
   const [starting, setStarting] = useState(false);
   const [name, setName] = useState("Site survey");
   const [presetIdx, setPresetIdx] = useState(0);
@@ -64,13 +68,13 @@ export default function App() {
   useEffect(() => {
     refreshMissions();
     api.getStatus().then((s) => setActiveId(s.active_mission ?? null));
+    api.listDevices().then(setDevices);
 
     const unsubs = [];
     const sub = (ev, cb) => api.on(ev, cb).then((u) => unsubs.push(u));
     sub("psd", onPsd);
     sub("detection", (d) => setDetections((prev) => [d, ...prev].slice(0, 300)));
-    sub("sensor_info", ([id, label]) => setSensorLabels((p) => ({ ...p, [id]: label })));
-    sub("sensor_status", ([id, state]) => setSensors((p) => ({ ...p, [id]: state })));
+    sub("devices", (list) => setDevices(list));
     sub("mission_state", ([id, phase]) => {
       if (phase === "Running") {
         setActiveId(id);
@@ -147,12 +151,9 @@ export default function App() {
 
   async function doStart() {
     if (selected == null) return;
-    // Reset device chips; they repopulate as sensor_info/sensor_status events arrive.
-    setSensors({});
-    setSensorLabels({});
     setStarting(true);
     try {
-      await api.startMission(selected); // returns immediately; devices open in the background
+      await api.startMission(selected); // returns immediately; devices already open
     } catch (e) {
       setStarting(false);
       alert("Start failed: " + e);
@@ -168,26 +169,31 @@ export default function App() {
     }
   }
 
+  const updateDevice = (id, cfg) => {
+    // optimistic local update; backend confirms via a devices event
+    setDevices((ds) => ds.map((d) => (d.id === id ? { ...d, ...renameCfg(cfg) } : d)));
+    api.setDeviceConfig(id, cfg);
+  };
+
   const [lo, hi] = rangeRef.current;
-  const mhz = (hz) => (hz / 1e6).toFixed(3);
   const active = activeId != null;
+  const readyCount = devices.filter(
+    (d) => d.enabled && (d.state === "Ready" || d.state === "InUse")
+  ).length;
+  const canStart = selected != null && !active && !starting && readyCount > 0;
 
   return (
     <div className="app">
       <div className="header">
         <h1>RF-LOG</h1>
-        <span className="sub">passive EM reconnaissance · sim</span>
+        <span className="sub">passive EM reconnaissance</span>
         <div className="spacer" />
-        <div className="sensors">
-          {starting && Object.keys(sensors).length === 0 && (
-            <span className="chip Opening">discovering devices…</span>
-          )}
-          {Object.entries(sensors).map(([id, st]) => (
-            <span key={id} className={`chip ${st}`} title={sensorLabels[id] || ""}>
-              {sensorLabels[id] || `S${id}`}: {st === "Opening" ? "loading…" : st}
-            </span>
-          ))}
-        </div>
+        <button className="ghost" onClick={() => api.refreshDevices()} title="Re-scan for SDRs">
+          ⟳ scan
+        </button>
+        <button className="ghost" onClick={() => setShowSettings(true)}>
+          ⚙ devices
+        </button>
         <span className={`pill ${active ? "on" : starting ? "warn" : "off"}`}>
           {active ? `MISSION ${activeId} RUNNING` : starting ? "STARTING…" : "IDLE"}
         </span>
@@ -235,17 +241,16 @@ export default function App() {
                 </div>
               ))}
               <div className="row">
-                <button
-                  className="primary"
-                  disabled={selected == null || active || starting}
-                  onClick={doStart}
-                >
+                <button className="primary" disabled={!canStart} onClick={doStart}>
                   {starting ? "Starting…" : "▶ Start"}
                 </button>
                 <button className="danger" disabled={!active} onClick={doStop}>
                   ■ Stop
                 </button>
               </div>
+              {readyCount === 0 && (
+                <div className="hint">no SDR ready — connect a device (see ⚙ devices)</div>
+              )}
             </div>
           </div>
         </div>
@@ -261,7 +266,7 @@ export default function App() {
           <div className="card">
             <h2>Waterfall</h2>
             <div className="pad" style={{ paddingBottom: 6 }}>
-              <canvas ref={fallRef} width={W} height={340} />
+              <canvas ref={fallRef} width={W} height={300} />
               <div className="axis">
                 <span>{mhz(lo)} MHz</span>
                 <span>{mhz((lo + hi) / 2)} MHz</span>
@@ -301,6 +306,127 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* device status bar */}
+      <div className="statusbar">
+        <span className="sb-label">SDRs</span>
+        {devices.length === 0 && <span className="sb-empty">none detected — connect an SDR</span>}
+        {devices.map((d) => (
+          <span key={d.id} className={`dev ${d.state}`} title={`${d.serial} · ${d.driver}`}>
+            <span className="dot" />
+            {d.label}
+            <span className="dev-state">{deviceStateText(d.state)}</span>
+            {(d.state === "Ready" || d.state === "InUse") && (
+              <span className="dev-meta">{(d.sample_rate_hz / 1e6).toFixed(2)}M</span>
+            )}
+          </span>
+        ))}
+        <div className="spacer" />
+        <span className="sb-label">{readyCount} ready</span>
+      </div>
+
+      {showSettings && (
+        <DeviceSettings
+          devices={devices}
+          onClose={() => setShowSettings(false)}
+          onChange={updateDevice}
+          onRescan={() => api.refreshDevices()}
+        />
+      )}
     </div>
   );
+}
+
+function deviceStateText(s) {
+  if (s === "Opening") return "loading…";
+  if (s === "Detected") return "detected";
+  if (s === "InUse") return "in use";
+  if (s === "Disconnected") return "gone";
+  return s.toLowerCase();
+}
+
+// map camelCase cfg back to snake_case fields for optimistic UI update
+function renameCfg(cfg) {
+  const out = {};
+  if ("enabled" in cfg) out.enabled = cfg.enabled;
+  if ("autoGain" in cfg) out.auto_gain = cfg.autoGain;
+  if ("gainDb" in cfg) out.gain_db = cfg.gainDb;
+  if ("sampleRateHz" in cfg) out.sample_rate_hz = cfg.sampleRateHz;
+  return out;
+}
+
+function DeviceSettings({ devices, onClose, onChange, onRescan }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>Devices</h2>
+          <div className="spacer" />
+          <button className="ghost" onClick={onRescan}>
+            ⟳ rescan
+          </button>
+          <button className="ghost" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          {devices.length === 0 && <div className="empty">No SDRs detected. Plug one in.</div>}
+          {devices.map((d) => (
+            <div key={d.id} className="dev-row">
+              <label className="dev-enable">
+                <input
+                  type="checkbox"
+                  checked={d.enabled}
+                  onChange={(e) => onChange(d.id, { enabled: e.target.checked })}
+                />
+              </label>
+              <div className="dev-id">
+                <div className="dev-name">{d.label}</div>
+                <div className="dev-sub">
+                  {d.serial} · {d.driver} · {(d.freq_min_hz / 1e6).toFixed(0)}–
+                  {(d.freq_max_hz / 1e6).toFixed(0)} MHz · <span className={`tag ${d.state}`}>{d.state}</span>
+                </div>
+              </div>
+              <div className="dev-cfg">
+                <label>rate</label>
+                <select
+                  value={nearestRate(d.sample_rate_hz)}
+                  onChange={(e) => onChange(d.id, { sampleRateHz: +e.target.value })}
+                >
+                  {SAMPLE_RATES.map((r) => (
+                    <option key={r} value={r}>
+                      {(r / 1e6).toFixed(3)} M
+                    </option>
+                  ))}
+                </select>
+                <label className="inline">
+                  <input
+                    type="checkbox"
+                    checked={d.auto_gain}
+                    onChange={(e) => onChange(d.id, { autoGain: e.target.checked })}
+                  />
+                  AGC
+                </label>
+                <input
+                  className="gain"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  disabled={d.auto_gain}
+                  value={d.gain_db}
+                  onChange={(e) => onChange(d.id, { gainDb: +e.target.value })}
+                />
+                <span className="unit">dB</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function nearestRate(hz) {
+  return SAMPLE_RATES.reduce((a, b) => (Math.abs(b - hz) < Math.abs(a - hz) ? b : a), SAMPLE_RATES[1]);
 }

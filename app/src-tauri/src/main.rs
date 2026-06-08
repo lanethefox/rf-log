@@ -4,7 +4,8 @@
 use rf_bus::Bus;
 use rf_catalog::Catalog;
 use rf_mission::{MissionConfig, MissionManager, spawn_detection_writer};
-use rf_types::{Band, BusEvent, Detection, MissionId};
+use rf_sensor::DeviceManager;
+use rf_types::{Band, BusEvent, Detection, DeviceInfo, MissionId, SensorId};
 use serde::Serialize;
 use std::sync::Arc;
 use std::sync::atomic::AtomicI64;
@@ -12,6 +13,7 @@ use tauri::{Emitter, Manager};
 
 struct AppState {
     mgr: Arc<MissionManager>,
+    devices: Arc<DeviceManager>,
 }
 
 #[derive(Serialize)]
@@ -99,6 +101,33 @@ fn get_status(state: tauri::State<AppState>) -> StatusDto {
     }
 }
 
+#[tauri::command]
+fn list_devices(state: tauri::State<AppState>) -> Vec<DeviceInfo> {
+    state.devices.snapshot()
+}
+
+#[tauri::command]
+fn refresh_devices(state: tauri::State<AppState>) {
+    let dm = state.devices.clone();
+    std::thread::spawn(move || dm.refresh());
+}
+
+#[tauri::command]
+fn set_device_config(
+    state: tauri::State<AppState>,
+    id: u32,
+    enabled: Option<bool>,
+    auto_gain: Option<bool>,
+    gain_db: Option<f32>,
+    sample_rate_hz: Option<f64>,
+) {
+    let dm = state.devices.clone();
+    // config can re-open a device (slow) — do it off the command thread.
+    std::thread::spawn(move || {
+        dm.set_config(SensorId(id), enabled, auto_gain, gain_db, sample_rate_hz)
+    });
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -114,13 +143,25 @@ fn main() {
             let active = Arc::new(AtomicI64::new(-1));
             spawn_detection_writer(catalog.clone(), active.clone(), det_rx);
 
+            // Device manager: background detection/open; publishes registry snapshots to
+            // the bus (→ status bar). Built without the soapy feature, it presents
+            // simulated devices.
+            let dm_bus = bus.clone();
+            let devices = Arc::new(DeviceManager::new(
+                MissionConfig::default().sample_rate,
+                2,
+                move |snap| dm_bus.publish(BusEvent::Devices(snap)),
+            ));
+            devices.start();
+
             let mgr = Arc::new(MissionManager::new(
                 catalog,
                 bus.clone(),
                 active,
                 MissionConfig::default(),
+                devices.clone(),
             ));
-            app.manage(AppState { mgr });
+            app.manage(AppState { mgr, devices });
 
             spawn_event_bridge(app.handle().clone(), bus);
 
@@ -137,7 +178,10 @@ fn main() {
             stop_mission,
             list_missions,
             list_detections,
-            get_status
+            get_status,
+            list_devices,
+            refresh_devices,
+            set_device_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running RF-LOG");
@@ -159,6 +203,9 @@ fn spawn_event_bridge(app: tauri::AppHandle, bus: Bus) {
                 }
                 Ok(BusEvent::Detection(d)) => {
                     let _ = app.emit("detection", d);
+                }
+                Ok(BusEvent::Devices(d)) => {
+                    let _ = app.emit("devices", d);
                 }
                 Ok(BusEvent::SensorInfo { id, label }) => {
                     let _ = app.emit("sensor_info", (id, label));

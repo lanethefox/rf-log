@@ -1,10 +1,13 @@
 //! Real SDR hardware backend via SoapySDR (RTL-SDR today; HackRF/Airspy later through
 //! the same factory). Gated behind the `soapy` feature.
 //!
-//! Replaces the v1 teardown hack: v1 did `std::mem::forget(dev)` on disconnect to dodge
-//! a SoapySDR/USB cleanup segfault, leaking the device + stream every cycle. Here the
-//! Rust `soapysdr` RAII types own cleanup, and [`Drop`] deactivates the stream first —
-//! no leak.
+//! Two stages so the [`DeviceManager`](crate::DeviceManager) can hold a device "Ready"
+//! (USB claimed) without streaming, and only activate the RX stream when a mission
+//! allocates it — no open/close churn:
+//! - [`SoapyDevice`] — opened device, no active stream.
+//! - [`SoapySdrSensor`] — activated stream, implements [`IqSensor`].
+//!
+//! Teardown is RAII (the v1 `mem::forget` leak is gone); [`Drop`] deactivates the stream.
 
 use crate::{IqSensor, SensorError};
 use num_complex::Complex32;
@@ -14,11 +17,12 @@ use soapysdr::{Device, Direction, ErrorCode, RxStream};
 const RX: Direction = Direction::Rx;
 const CH: usize = 0;
 
-/// A discovered SoapySDR device.
+/// A discovered SoapySDR device (from enumeration).
 #[derive(Debug, Clone)]
 pub struct SoapyDeviceInfo {
-    /// Device-open argument string (e.g. `driver=rtlsdr,serial=...`).
     pub args: String,
+    pub serial: String,
+    pub driver: String,
     pub label: String,
 }
 
@@ -27,38 +31,37 @@ pub fn enumerate() -> Vec<SoapyDeviceInfo> {
     soapysdr::enumerate("driver=rtlsdr")
         .unwrap_or_default()
         .into_iter()
-        .map(|args| SoapyDeviceInfo {
-            label: args.get("label").map(|s| s.to_string()).unwrap_or_default(),
-            args: args.to_string(),
+        .map(|args| {
+            let get = |k: &str| args.get(k).map(|s| s.to_string()).unwrap_or_default();
+            SoapyDeviceInfo {
+                serial: get("serial"),
+                driver: get("driver"),
+                label: get("label"),
+                args: args.to_string(),
+            }
         })
         .collect()
 }
 
-/// A live RTL-SDR (or other SoapySDR) receiver behind the [`IqSensor`] trait.
-pub struct SoapySdrSensor {
+/// An opened device with its USB handle claimed but **no active RX stream** — the idle
+/// "Ready" state the manager parks devices in.
+pub struct SoapyDevice {
     id: SensorId,
     caps: SensorCapabilities,
     sample_rate: f64,
-    center: f64,
     dev: Device,
-    stream: RxStream<Complex32>,
 }
 
-impl SoapySdrSensor {
-    /// Open the device described by `args`, set the sample rate, and start its RX stream.
+impl SoapyDevice {
+    /// Open `args`, set the sample rate, and read capabilities. Does not stream.
     pub fn open(id: SensorId, args: &str, sample_rate: f64) -> Result<Self, SensorError> {
         let dev = Device::new(args).map_err(io)?;
         dev.set_sample_rate(RX, CH, sample_rate).map_err(io)?;
-
         let (fmin, fmax) = match dev.frequency_range(RX, CH) {
-            Ok(ranges) if !ranges.is_empty() => (
-                ranges
-                    .iter()
-                    .map(|r| r.minimum)
-                    .fold(f64::INFINITY, f64::min),
-                ranges
-                    .iter()
-                    .map(|r| r.maximum)
+            Ok(r) if !r.is_empty() => (
+                r.iter().map(|x| x.minimum).fold(f64::INFINITY, f64::min),
+                r.iter()
+                    .map(|x| x.maximum)
                     .fold(f64::NEG_INFINITY, f64::max),
             ),
             _ => (24e6, 1.766e9), // RTL-SDR R820T2 fallback
@@ -67,10 +70,6 @@ impl SoapySdrSensor {
             Ok(r) => (r.minimum as f32, r.maximum as f32),
             _ => (0.0, 49.6),
         };
-
-        let mut stream = dev.rx_stream::<Complex32>(&[CH]).map_err(io)?;
-        stream.activate(None).map_err(io)?;
-
         let caps = SensorCapabilities {
             freq_min_hz: fmin,
             freq_max_hz: fmax,
@@ -83,11 +82,47 @@ impl SoapySdrSensor {
             id,
             caps,
             sample_rate,
-            center: (fmin + fmax) / 2.0,
             dev,
+        })
+    }
+
+    pub fn capabilities(&self) -> &SensorCapabilities {
+        &self.caps
+    }
+
+    /// Apply gain config: automatic AGC, or a manual dB value.
+    pub fn set_gain_config(&self, auto: bool, gain_db: f32) -> Result<(), SensorError> {
+        self.dev.set_gain_mode(RX, CH, auto).map_err(io)?;
+        if !auto {
+            self.dev.set_gain(RX, CH, gain_db as f64).map_err(io)?;
+        }
+        Ok(())
+    }
+
+    /// Activate the RX stream, turning this into a streaming [`SoapySdrSensor`].
+    pub fn activate(self) -> Result<SoapySdrSensor, SensorError> {
+        let mut stream = self.dev.rx_stream::<Complex32>(&[CH]).map_err(io)?;
+        stream.activate(None).map_err(io)?;
+        let center = (self.caps.freq_min_hz + self.caps.freq_max_hz) / 2.0;
+        Ok(SoapySdrSensor {
+            id: self.id,
+            caps: self.caps,
+            sample_rate: self.sample_rate,
+            center,
+            dev: self.dev,
             stream,
         })
     }
+}
+
+/// A live RTL-SDR (or other SoapySDR) receiver behind the [`IqSensor`] trait.
+pub struct SoapySdrSensor {
+    id: SensorId,
+    caps: SensorCapabilities,
+    sample_rate: f64,
+    center: f64,
+    dev: Device,
+    stream: RxStream<Complex32>,
 }
 
 impl IqSensor for SoapySdrSensor {
@@ -126,7 +161,6 @@ impl IqSensor for SoapySdrSensor {
 
 impl Drop for SoapySdrSensor {
     fn drop(&mut self) {
-        // Clean teardown — the fix for the v1 mem::forget leak.
         let _ = self.stream.deactivate(None);
     }
 }
@@ -141,7 +175,6 @@ mod tests {
 
     #[test]
     fn enumerate_never_panics_without_hardware() {
-        // No dongle in CI → empty; with an RTL-SDR attached → at least one.
         let devices = enumerate();
         println!("soapy rtlsdr devices found: {}", devices.len());
     }

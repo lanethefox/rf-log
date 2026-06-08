@@ -2626,6 +2626,7 @@ dependencies = [
  "rf-bus",
  "rf-catalog",
  "rf-mission",
+ "rf-sensor",
  "rf-types",
  "serde",
  "serde_json",

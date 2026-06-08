@@ -103,6 +103,50 @@ pub enum SensorState {
 }
 
 // ---------------------------------------------------------------------------
+// Device registry (managed independently of any mission)
+// ---------------------------------------------------------------------------
+
+/// Lifecycle of a device in the registry, surfaced to the status bar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeviceState {
+    /// Enumerated on the bus but not yet opened.
+    Detected,
+    /// Being opened/probed (USB init) — shown as "loading".
+    Opening,
+    /// Open and available for allocation.
+    Ready,
+    /// Allocated to a running mission.
+    InUse,
+    /// Open or probe failed.
+    Error,
+    /// Was present, now gone (unplugged).
+    Disconnected,
+}
+
+/// A device as tracked by the [`DeviceManager`](../rf_sensor) registry — the unit the
+/// status bar and settings panel render. Keyed by hardware `serial`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    /// Session-stable handle assigned by the manager.
+    pub id: SensorId,
+    /// Hardware serial — the durable identity across replugs.
+    pub serial: String,
+    pub label: String,
+    pub driver: String,
+    pub freq_min_hz: Hz,
+    pub freq_max_hz: Hz,
+    /// Configured sample rate (≈ instantaneous bandwidth).
+    pub sample_rate_hz: Hz,
+    /// Configured manual gain (dB); ignored when `auto_gain`.
+    pub gain_db: f32,
+    pub auto_gain: bool,
+    /// Whether this device participates in allocation.
+    pub enabled: bool,
+    pub state: DeviceState,
+    pub simulated: bool,
+}
+
+// ---------------------------------------------------------------------------
 // Spectral data
 // ---------------------------------------------------------------------------
 
@@ -199,6 +243,9 @@ pub enum BusEvent {
     SensorInfo { id: SensorId, label: String },
     /// A sensor changed state — lossless.
     SensorStatus { id: SensorId, state: SensorState },
+    /// Full device-registry snapshot — emitted on any device change (hotplug, open,
+    /// allocate, config) for the status bar / settings panel.
+    Devices(Vec<DeviceInfo>),
     /// A mission changed phase — lossless.
     MissionState { id: MissionId, phase: MissionPhase },
 }

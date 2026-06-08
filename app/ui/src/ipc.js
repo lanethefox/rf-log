@@ -11,6 +11,10 @@ export const api = {
   listMissions: () => invoke("list_missions"),
   listDetections: (id, limit = 200) => invoke("list_detections", { id, limit }),
   getStatus: () => invoke("get_status"),
+  listDevices: () => invoke("list_devices"),
+  refreshDevices: () => invoke("refresh_devices"),
+  // cfg keys are camelCase; Tauri maps them to the snake_case command params.
+  setDeviceConfig: (id, cfg) => invoke("set_device_config", { id, ...cfg }),
   // returns a Promise<UnlistenFn>
   on: (event, cb) => listen(event, (e) => cb(e.payload)),
 };
