@@ -12,9 +12,7 @@
 use rf_bus::Bus;
 use rf_catalog::Catalog;
 use rf_dsp::SurveyDsp;
-use rf_sensor::{PoolConfig, PoolHandle, SensorPool, SimSensor, now_unix_ns};
-#[cfg(feature = "soapy")]
-use rf_types::SensorState;
+use rf_sensor::{DeviceManager, PoolConfig, PoolHandle, SensorPool, now_unix_ns};
 use rf_types::{Band, BusEvent, Detection, MissionId, MissionPhase, SensorId, SensorRole};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc::channel;
@@ -74,6 +72,7 @@ struct RunningMission {
     id: MissionId,
     pool: PoolHandle,
     workers: Vec<JoinHandle<()>>,
+    device_ids: Vec<SensorId>,
 }
 
 /// Creates, starts, and stops missions; one runs at a time in P0.
@@ -82,6 +81,7 @@ pub struct MissionManager {
     bus: Bus,
     active: Arc<AtomicI64>,
     cfg: MissionConfig,
+    devices: Arc<DeviceManager>,
     running: Mutex<Option<RunningMission>>,
 }
 
@@ -91,12 +91,14 @@ impl MissionManager {
         bus: Bus,
         active: Arc<AtomicI64>,
         cfg: MissionConfig,
+        devices: Arc<DeviceManager>,
     ) -> Self {
         Self {
             catalog,
             bus,
             active,
             cfg,
+            devices,
             running: Mutex::new(None),
         }
     }
@@ -132,71 +134,19 @@ impl MissionManager {
         if bands.is_empty() {
             return Err("mission has no bands".into());
         }
-        let low = bands.iter().map(|b| b.low_hz).fold(f64::INFINITY, f64::min);
-        let high = bands
-            .iter()
-            .map(|b| b.high_hz)
-            .fold(f64::NEG_INFINITY, f64::max);
 
+        // Allocate ready devices from the manager (already opened in the background).
+        // Survey uses every available device; multi-SDR functions take more as present.
+        let sensors = self.devices.allocate(usize::MAX);
+        if sensors.is_empty() {
+            return Err("no SDR available — connect a device".into());
+        }
+        let device_ids: Vec<SensorId> = sensors.iter().map(|s| s.id()).collect();
         let mut pool = SensorPool::new();
-        // Prefer real hardware when the `soapy` feature is built and a device is attached;
-        // otherwise fall back to the simulated pool.
-        #[allow(unused_mut)]
-        let mut hardware = false;
-        #[cfg(feature = "soapy")]
-        {
-            let discovered = rf_sensor::enumerate_soapy();
-            // Announce every device up front so the UI shows them all "loading" at once,
-            // before the slow per-device USB open begins.
-            for (i, d) in discovered.iter().enumerate() {
-                let sid = SensorId(i as u32);
-                let label = if d.label.is_empty() {
-                    d.args.clone()
-                } else {
-                    d.label.clone()
-                };
-                self.bus.publish(BusEvent::SensorInfo { id: sid, label });
-                self.bus.publish(BusEvent::SensorStatus {
-                    id: sid,
-                    state: SensorState::Opening,
-                });
-            }
-            // Open each device (the slow part), reporting readiness as it comes up.
-            for (i, d) in discovered.into_iter().enumerate() {
-                let sid = SensorId(i as u32);
-                match rf_sensor::SoapySdrSensor::open(sid, &d.args, self.cfg.sample_rate) {
-                    Ok(s) => {
-                        tracing::info!("opened SDR: {}", d.args);
-                        self.bus.publish(BusEvent::SensorStatus {
-                            id: sid,
-                            state: SensorState::Connected,
-                        });
-                        pool.add(Box::new(s), SensorRole::SurveySweep);
-                        hardware = true;
-                    }
-                    Err(e) => {
-                        tracing::warn!("failed to open {}: {e}", d.args);
-                        self.bus.publish(BusEvent::SensorStatus {
-                            id: sid,
-                            state: SensorState::Error,
-                        });
-                    }
-                }
-            }
+        for s in sensors {
+            pool.add(s, SensorRole::SurveySweep);
         }
-        if !hardware {
-            for s in 0..self.cfg.num_sensors.max(1) {
-                pool.add(
-                    Box::new(SimSensor::new(
-                        SensorId(s as u32),
-                        low,
-                        high,
-                        self.cfg.sample_rate,
-                    )),
-                    SensorRole::SurveySweep,
-                );
-            }
-        }
+
         let (dwell_tx, dwell_rx) = channel();
         let (status_tx, status_rx) = channel();
         let pool_handle = pool.start(
@@ -259,6 +209,7 @@ impl MissionManager {
             id,
             pool: pool_handle,
             workers: vec![dsp_handle, status_handle],
+            device_ids,
         });
         Ok(())
     }
@@ -274,6 +225,7 @@ impl MissionManager {
         for w in run.workers {
             let _ = w.join();
         }
+        self.devices.release(&run.device_ids); // return SDRs to the ready pool
         self.catalog
             .set_mission_phase(run.id, MissionPhase::Stopped)
             .map_err(|e| e.to_string())?;
@@ -297,6 +249,8 @@ mod tests {
         let active = Arc::new(AtomicI64::new(-1));
         spawn_detection_writer(catalog.clone(), active.clone(), det_rx);
 
+        let devices = Arc::new(DeviceManager::new(2_400_000.0, 2, |_| {}));
+        devices.refresh(); // open the simulated devices to Ready
         let mgr = MissionManager::new(
             catalog.clone(),
             bus,
@@ -308,6 +262,7 @@ mod tests {
                 sample_rate: 2_400_000.0,
                 num_sensors: 2,
             },
+            devices,
         );
         let bands = vec![Band {
             name: "VHF".into(),
@@ -345,7 +300,15 @@ mod tests {
         let (bus, det_rx) = rf_bus::channel(1024);
         let active = Arc::new(AtomicI64::new(-1));
         spawn_detection_writer(catalog.clone(), active.clone(), det_rx);
-        let mgr = MissionManager::new(catalog.clone(), bus, active, MissionConfig::default());
+        let devices = Arc::new(DeviceManager::new(2_400_000.0, 0, |_| {}));
+        devices.refresh(); // open attached RTL-SDRs to Ready
+        let mgr = MissionManager::new(
+            catalog.clone(),
+            bus,
+            active,
+            MissionConfig::default(),
+            devices,
+        );
 
         let bands = vec![Band {
             name: "FM".into(),

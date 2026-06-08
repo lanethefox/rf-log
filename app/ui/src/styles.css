@@ -20,7 +20,7 @@ html, body, #root {
   font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-.app { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+.app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
 
 .header {
   display: flex; align-items: center; gap: 16px;
@@ -77,3 +77,62 @@ th, td { text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--bor
 th { color: var(--dim); position: sticky; top: 0; background: var(--panel2); font-weight: normal; }
 td.l, th.l { text-align: left; }
 .empty { color: var(--dim); padding: 20px; text-align: center; }
+
+/* ---- buttons ---- */
+button.ghost { width: auto; background: transparent; border-color: var(--border); color: var(--dim); padding: 4px 10px; }
+button.ghost:hover { color: var(--text); border-color: var(--accent2); }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.hint { color: var(--warn); font-size: 11px; margin-top: 8px; text-align: center; }
+
+/* ---- device status bar ---- */
+.statusbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 12px; background: var(--panel); border-top: 1px solid var(--border);
+  font-size: 11px; overflow-x: auto; white-space: nowrap;
+}
+.sb-label { color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+.sb-empty { color: var(--warn); }
+.dev {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 12px; color: var(--text);
+}
+.dev .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+.dev-state { color: var(--dim); }
+.dev-meta { color: var(--accent2); }
+.dev.Ready .dot { background: var(--accent); }
+.dev.InUse .dot { background: var(--accent2); }
+.dev.InUse { border-color: var(--accent2); }
+.dev.Opening .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+.dev.Opening { border-color: var(--warn); }
+.dev.Error .dot { background: var(--warn); }
+.dev.Error { border-color: var(--warn); color: var(--warn); }
+.dev.Disconnected { opacity: 0.5; }
+
+/* ---- settings modal ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.modal {
+  width: min(720px, 92vw); max-height: 80vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+}
+.modal-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { margin: 0; font-size: 13px; color: var(--accent); letter-spacing: 1px; }
+.modal-body { padding: 8px 14px 14px; overflow-y: auto; }
+.dev-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.dev-enable input { width: auto; }
+.dev-id { flex: 1; min-width: 0; }
+.dev-name { font-weight: bold; }
+.dev-sub { color: var(--dim); font-size: 11px; }
+.dev-cfg { display: flex; align-items: center; gap: 6px; }
+.dev-cfg label { margin: 0; }
+.dev-cfg label.inline { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.dev-cfg select, .dev-cfg .gain { width: auto; }
+.dev-cfg .gain { width: 64px; }
+.dev-cfg .unit { color: var(--dim); }
+.tag { padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); }
+.tag.Ready { color: var(--accent); border-color: var(--accent); }
+.tag.InUse { color: var(--accent2); border-color: var(--accent2); }
+.tag.Opening { color: var(--warn); border-color: var(--warn); }
+.tag.Error { color: var(--warn); border-color: var(--warn); }
